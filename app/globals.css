@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens.
+ *
+ * Every colour the app uses is named by role (surface, border, danger…) rather
+ * than by hue, so a rebrand is a change to this block alone. Tailwind v4 exposes
+ * each one as a utility via `@theme inline`.
+ */
+:root {
+  --background: #f6f7f9;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  /*
+   * Slate-600, not slate-500 (#64748b). Slate-500 measures 4.48:1 against the
+   * white surface — a hair under the WCAG AA 4.5:1 minimum for body text, and
+   * flagged by the axe audit in e2e/accessibility.spec.ts. This token carries
+   * every hint, helper, and secondary label in the app, so it has to clear the
+   * bar on both --surface and --surface-muted.
+   */
+  --muted: #475569;
+  --primary: #1d4ed8;
+  --primary-hover: #1e40af;
+  --primary-foreground: #ffffff;
+  --primary-subtle: #eff6ff;
+  --primary-border: #bfdbfe;
+  --danger: #b91c1c;
+  --danger-subtle: #fef2f2;
+  --danger-border: #fecaca;
+  --success: #15803d;
+  --success-subtle: #f0fdf4;
+  --success-border: #bbf7d0;
+  --ring: #2563eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-subtle: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-border: var(--primary-border);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-border: var(--danger-border);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-border: var(--success-border);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/*
+ * Respect the user's motion preference. The wizard's only animations are
+ * decorative, so removing them costs nothing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
