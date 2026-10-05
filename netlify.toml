@@ -1,0 +1,14 @@
+# Netlify configuration.
+#
+# The build command and publish directory are configured in the Netlify UI and
+# intentionally left out here so this file does not override them.
+
+[build.environment]
+  # Secrets scanning guards against secret *values* being committed to the repo
+  # or baked into build output. TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set
+  # as Netlify environment variables and read only at runtime on the server, in
+  # lib/refund/submission-handoff.ts via `process.env`. They are never inlined
+  # into the client bundle or any committed file. The scanner still flags them
+  # (the short numeric chat id in particular matches coincidentally inside
+  # minified output), so these specific keys are declared as expected.
+  SECRETS_SCAN_OMIT_KEYS = "TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID"
