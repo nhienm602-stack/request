@@ -4,6 +4,7 @@ import { verificationSchema } from "./verification-schema";
 import { verifyFileSignatures } from "./server-validation";
 import {
   handOffRefundSubmission,
+  RefundHandOffNotImplementedError,
   type ValidatedRefundSubmission,
 } from "./submission-handoff";
 import { DETAILS_FIELD, type FieldErrors } from "./submission-contract";
@@ -27,12 +28,13 @@ import { DETAILS_FIELD, type FieldErrors } from "./submission-contract";
 export type SubmissionOutcome =
   | { status: "accepted"; reference: string }
   | { status: "invalid"; fieldErrors: FieldErrors; message?: string }
+  | { status: "not-implemented"; message: string }
   | { status: "failed"; message: string };
 
 const GENERIC_FAILURE = "We could not submit your request just now. Please try again in a moment.";
 
-// const NOT_IMPLEMENTED =
-//   "Refund submissions are not connected to a service yet, so this request was not sent.";
+const NOT_IMPLEMENTED =
+  "Refund submissions are not connected to a service yet, so this request was not sent.";
 
 const STALE_DETAILS =
   "Some of your order details are no longer valid. Go back and check them, then try again.";
@@ -58,7 +60,10 @@ export async function processRefundSubmission(formData: FormData): Promise<Submi
     }
 
     return { status: "accepted", reference: reference.trim() };
-    } catch (cause) {
+  } catch (cause) {
+    if (cause instanceof RefundHandOffNotImplementedError) {
+      return { status: "not-implemented", message: NOT_IMPLEMENTED };
+    }
     // The cause stays server-side. Returning it would leak internal detail for
     // no user benefit.
     console.error("[refund] hand-off failed", cause);

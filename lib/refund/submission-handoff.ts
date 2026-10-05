@@ -17,6 +17,19 @@ interface TelegramResponse {
   description?: string;
 }
 
+/**
+ * Thrown when no integration is configured to receive submissions.
+ *
+ * Distinct from a runtime failure: the request was understood and validated,
+ * but there is nowhere to send it. The route maps this to 501.
+ */
+export class RefundHandOffNotImplementedError extends Error {
+  constructor(message = "Refund submissions are not connected to a service yet.") {
+    super(message);
+    this.name = "RefundHandOffNotImplementedError";
+  }
+}
+
 export async function handOffRefundSubmission(
   submission: ValidatedRefundSubmission
 ): Promise<RefundSubmissionReceipt> {
@@ -24,9 +37,7 @@ export async function handOffRefundSubmission(
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
   if (!botToken || !chatId) {
-    throw new Error(
-      "Telegram integration is not configured."
-    );
+    throw new RefundHandOffNotImplementedError();
   }
 
   const reference = createReference();
