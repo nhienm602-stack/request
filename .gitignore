@@ -1,5 +1,9 @@
 node_modules/
 .env
+
+# Next.js build output — regenerated on every build, never committed.
+.next/
+out/
 vite.config.js.timestamp-*.mjs
 vite.config.mjs.timestamp-*.mjs
 vite.config.cjs.timestamp-*.mjs
