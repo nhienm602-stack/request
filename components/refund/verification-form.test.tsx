@@ -38,8 +38,8 @@ function setup() {
 
 /** Uploads through the real input, so RHF's Controller wiring is exercised. */
 async function uploadAll(user: ReturnType<typeof userEvent.setup>) {
-  await user.upload(screen.getByLabelText(/front of the product/i), photo());
-  await user.upload(screen.getByLabelText(/back of the product/i), photo("back.png", "image/png"));
+  await user.upload(screen.getByLabelText(/front side/i), photo());
+  await user.upload(screen.getByLabelText(/back side/i), photo("back.png", "image/png"));
   await user.upload(screen.getByLabelText(/video selfie/i), video());
 }
 
@@ -67,7 +67,7 @@ describe("VerificationForm", () => {
 
   it("reflects a chosen file in the UI", async () => {
     const { user } = setup();
-    await user.upload(screen.getByLabelText(/front of the product/i), photo());
+    await user.upload(screen.getByLabelText(/front side/i), photo());
     expect(await screen.findByText("front.jpg")).toBeInTheDocument();
   });
 
@@ -104,7 +104,7 @@ describe("VerificationForm", () => {
     // hands a PDF over through the picker in the first place.
     const { user } = setup();
     await user.upload(
-      screen.getByLabelText(/front of the product/i),
+      screen.getByLabelText(/front side/i),
       new File([new Uint8Array(10)], "notes.pdf", { type: "application/pdf" })
     );
     expect(screen.queryByText("notes.pdf")).not.toBeInTheDocument();
@@ -129,19 +129,24 @@ describe("VerificationForm", () => {
   it("places a server-side field rejection back on the matching field", async () => {
     submitMock.mockResolvedValue({
       status: "invalid",
-      fieldErrors: { frontPhoto: ["The front photo must be 10 MB or smaller."] },
+      fieldErrors: { frontPhoto: ["The front photo must be 4 MB or smaller."] },
+      progress: { reference: null, uploadedSlots: [] },
     });
 
     const { user, onSubmitted } = setup();
     await uploadAll(user);
     await user.click(screen.getByRole("button", { name: /submit refund request/i }));
 
-    expect(await screen.findByText(/must be 10 MB or smaller/i)).toBeInTheDocument();
+    expect(await screen.findByText(/must be 4 MB or smaller/i)).toBeInTheDocument();
     expect(onSubmitted).not.toHaveBeenCalled();
   });
 
   it("surfaces a server failure as a retryable banner", async () => {
-    submitMock.mockResolvedValue({ status: "error", formError: "We could not submit your request." });
+    submitMock.mockResolvedValue({
+      status: "error",
+      formError: "We could not submit your request.",
+      progress: { reference: null, uploadedSlots: [] },
+    });
 
     const { user, onSubmitted } = setup();
     await uploadAll(user);

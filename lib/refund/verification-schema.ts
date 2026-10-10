@@ -15,6 +15,7 @@ import {
   formatBytes,
   hasAllowedType,
 } from "./media";
+import { type FileField } from "./submission-contract";
 
 /**
  * `z.instanceof(File)` is avoided deliberately: `File` is realm-scoped, so a
@@ -45,19 +46,48 @@ function mediaFile(constraints: MediaConstraints, subject: string) {
     });
 }
 
+/**
+ * Per-slot configuration — one source of truth for the constraints, the subject
+ * used in size/type messages, and the "you didn't add this" message. Both the
+ * whole-form schema and the single-file schema below are built from it, so the
+ * chunked upload path and the legacy all-at-once path validate identically.
+ */
+const SLOT_CONFIG: Record<
+  FileField,
+  { constraints: MediaConstraints; subject: string; missing: string }
+> = {
+  frontPhoto: {
+    constraints: PHOTO_CONSTRAINTS,
+    subject: "The front photo",
+    missing: "Add a photo of the front of the product.",
+  },
+  backPhoto: {
+    constraints: PHOTO_CONSTRAINTS,
+    subject: "The back photo",
+    missing: "Add a photo of the back of the product.",
+  },
+  videoSelfie: {
+    constraints: VIDEO_CONSTRAINTS,
+    subject: "The video selfie",
+    missing: "Add a video selfie so we can verify your request.",
+  },
+};
+
+/**
+ * Validates a single upload slot. Used by the chunked protocol, which receives
+ * one file per request and so cannot run the whole-form schema.
+ */
+export function fileSlotSchema(slot: FileField) {
+  const { constraints, subject, missing } = SLOT_CONFIG[slot];
+  return mediaFile(constraints, subject)
+    .nullable()
+    .refine((file): file is File => file !== null, { error: missing });
+}
+
 export const verificationSchema = z.object({
-  frontPhoto: mediaFile(PHOTO_CONSTRAINTS, "The front photo").nullable().refine(
-    (file): file is File => file !== null,
-    { error: "Add a photo of the front of the product." }
-  ),
-  backPhoto: mediaFile(PHOTO_CONSTRAINTS, "The back photo").nullable().refine(
-    (file): file is File => file !== null,
-    { error: "Add a photo of the back of the product." }
-  ),
-  videoSelfie: mediaFile(VIDEO_CONSTRAINTS, "The video selfie").nullable().refine(
-    (file): file is File => file !== null,
-    { error: "Add a video selfie so we can verify your request." }
-  ),
+  frontPhoto: fileSlotSchema("frontPhoto"),
+  backPhoto: fileSlotSchema("backPhoto"),
+  videoSelfie: fileSlotSchema("videoSelfie"),
 });
 
 export type VerificationInput = z.input<typeof verificationSchema>;

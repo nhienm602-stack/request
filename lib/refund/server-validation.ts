@@ -36,6 +36,30 @@ const SUBJECTS: Record<FileField, string> = {
 export type FieldErrors = Record<string, string[]>;
 
 /**
+ * Confirms a single uploaded file really is the format it claims to be.
+ *
+ * Returns the per-field error messages, or `null` when the file's bytes match
+ * one of the kinds allowed for that field. Used by the chunked upload path,
+ * which validates one file at a time.
+ */
+export async function verifyFileSignature(
+  field: FileField,
+  file: Blob
+): Promise<string[] | null> {
+  const kind = await detectBlobKind(file);
+  const allowed = EXPECTED_KINDS[field];
+  if (kind !== null && allowed.includes(kind)) return null;
+
+  // The message deliberately does not echo the detected format back. It is
+  // attacker-controlled input, and naming it invites probing for what the
+  // sniffer accepts.
+  const medium = field === "videoSelfie" ? "video" : "image";
+  return [
+    `${SUBJECTS[field]} does not look like a valid ${medium} file. Re-export it and try again.`,
+  ];
+}
+
+/**
  * Confirms each uploaded file really is the format it claims to be.
  *
  * Returns per-field errors in the same shape the schemas produce, so callers

@@ -1,7 +1,15 @@
 import type { RefundDetails } from "./details-schema";
 import type { Verification } from "./verification-schema";
+import type { FileField } from "./submission-contract";
 
 const TELEGRAM_API_BASE = "https://api.telegram.org/bot";
+
+/** Caption suffix for each uploaded file, so the chat shows what it is. */
+const SLOT_LABELS: Record<FileField, string> = {
+  frontPhoto: "Front photo",
+  backPhoto: "Back photo",
+  videoSelfie: "Video selfie",
+};
 
 export interface ValidatedRefundSubmission {
   readonly details: RefundDetails;
@@ -30,44 +38,53 @@ export class RefundHandOffNotImplementedError extends Error {
   }
 }
 
-export async function handOffRefundSubmission(
-  submission: ValidatedRefundSubmission
-): Promise<RefundSubmissionReceipt> {
+/**
+ * Reads the Telegram credentials, or signals that no integration is configured.
+ *
+ * Both the legacy all-at-once hand-off and the per-step senders go through here,
+ * so "not configured" surfaces identically (→ 501) however the submission
+ * arrives.
+ */
+function requireTelegramConfig(): { botToken: string; chatId: string } {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-
   if (!botToken || !chatId) {
     throw new RefundHandOffNotImplementedError();
   }
+  return { botToken, chatId };
+}
+
+/** Sends the details summary message. Call once, at the start of a submission. */
+export async function sendDetailsMessage(
+  reference: string,
+  details: RefundDetails
+): Promise<void> {
+  const { botToken, chatId } = requireTelegramConfig();
+  await sendTelegramMessage(botToken, chatId, buildDetailsMessage(reference, details));
+}
+
+/** Sends one uploaded file, captioned with the reference and which slot it is. */
+export async function sendFileToTelegram(
+  reference: string,
+  slot: FileField,
+  file: File
+): Promise<void> {
+  const { botToken, chatId } = requireTelegramConfig();
+  await sendTelegramDocument(botToken, chatId, file, `Refund ${reference} — ${SLOT_LABELS[slot]}`);
+}
+
+export async function handOffRefundSubmission(
+  submission: ValidatedRefundSubmission
+): Promise<RefundSubmissionReceipt> {
+  // Fail fast with a clear "not configured" signal before doing any work.
+  requireTelegramConfig();
 
   const reference = createReference();
 
-  await sendTelegramMessage(
-    botToken,
-    chatId,
-    buildDetailsMessage(reference, submission.details)
-  );
-
-  await sendTelegramDocument(
-    botToken,
-    chatId,
-    submission.files.frontPhoto,
-    `Refund ${reference} — Front photo`
-  );
-
-  await sendTelegramDocument(
-    botToken,
-    chatId,
-    submission.files.backPhoto,
-    `Refund ${reference} — Back photo`
-  );
-
-  await sendTelegramDocument(
-    botToken,
-    chatId,
-    submission.files.videoSelfie,
-    `Refund ${reference} — Video selfie`
-  );
+  await sendDetailsMessage(reference, submission.details);
+  await sendFileToTelegram(reference, "frontPhoto", submission.files.frontPhoto);
+  await sendFileToTelegram(reference, "backPhoto", submission.files.backPhoto);
+  await sendFileToTelegram(reference, "videoSelfie", submission.files.videoSelfie);
 
   return { reference };
 }
@@ -166,7 +183,7 @@ function buildDetailsMessage(
   ].join("\n");
 }
 
-function createReference(): string {
+export function createReference(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = crypto.randomUUID().slice(0, 8).toUpperCase();
 

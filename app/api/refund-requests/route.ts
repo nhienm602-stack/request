@@ -1,8 +1,18 @@
 import type { NextRequest } from "next/server";
-import { processRefundSubmission } from "@/lib/refund/submission";
-import type {
-  RefundSubmissionAccepted,
-  RefundSubmissionRejected,
+import {
+  processRefundSubmission,
+  processInitStep,
+  processFileStep,
+  type SubmissionOutcome,
+} from "@/lib/refund/submission";
+import {
+  DETAILS_FIELD,
+  REFERENCE_FIELD,
+  SLOT_FIELD,
+  STEP_FIELD,
+  isFileField,
+  type RefundSubmissionAccepted,
+  type RefundSubmissionRejected,
 } from "@/lib/refund/submission-contract";
 
 /**
@@ -53,7 +63,9 @@ export async function POST(request: NextRequest): Promise<Response> {
     return rejected(400, "The upload could not be read. Please try again.");
   }
 
-  const outcome = await processRefundSubmission(formData);
+  const outcome = await dispatch(formData);
+  // A protocol-level problem (bad step/slot/reference) is already a Response.
+  if (outcome instanceof Response) return outcome;
 
   switch (outcome.status) {
     case "accepted":
@@ -75,6 +87,52 @@ export async function POST(request: NextRequest): Promise<Response> {
     case "failed":
       return rejected(500, outcome.message);
   }
+}
+
+/**
+ * Routes the request to the right handler based on its `step`:
+ *   - no step  → the legacy single-request path (all fields at once).
+ *   - "init"   → details + the first file.
+ *   - "file"   → one further file, under the reference from the init step.
+ * Returns a `Response` directly only for a malformed protocol request (400);
+ * otherwise a `SubmissionOutcome` the caller maps to a status code.
+ */
+async function dispatch(formData: FormData): Promise<SubmissionOutcome | Response> {
+  const step = formData.get(STEP_FIELD);
+
+  if (step === null) {
+    return processRefundSubmission(formData);
+  }
+
+  if (step === "init") {
+    return processInitStep({
+      details: formData.get(DETAILS_FIELD),
+      frontPhoto: asFile(formData.get("frontPhoto")),
+    });
+  }
+
+  if (step === "file") {
+    const reference = formData.get(REFERENCE_FIELD);
+    if (typeof reference !== "string" || reference.trim() === "") {
+      return rejected(400, "This upload is missing its submission reference. Please try again.");
+    }
+    const slot = formData.get(SLOT_FIELD);
+    if (!isFileField(slot)) {
+      return rejected(400, "This upload names an unknown file. Please try again.");
+    }
+    return processFileStep({
+      reference: reference.trim(),
+      slot,
+      file: asFile(formData.get(slot)),
+    });
+  }
+
+  return rejected(400, "Unrecognised submission step.");
+}
+
+/** `FormData.get` yields `string | File | null`; only a real File is usable. */
+function asFile(value: FormDataEntryValue | null): File | null {
+  return value instanceof File ? value : null;
 }
 
 function accepted(reference: string): Response {

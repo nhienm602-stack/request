@@ -15,7 +15,7 @@ import {
   type Verification,
   type VerificationInput,
 } from "@/lib/refund/verification-schema";
-import { submitRefundRequest } from "@/lib/refund/submit-refund-request";
+import { submitRefundRequest, type SubmitProgress } from "@/lib/refund/submit-refund-request";
 import type { RefundDetails } from "@/lib/refund/details-schema";
 
 interface VerificationFormProps {
@@ -36,8 +36,17 @@ interface VerificationFormProps {
 export function VerificationForm({ details, onSubmitted }: VerificationFormProps) {
   const [isPending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
+  // Label for the current upload step, shown on the button while submitting.
+  const [stepLabel, setStepLabel] = useState<string | null>(null);
   // Duration is checked asynchronously in the browser, outside the schema.
   const [durationError, setDurationError] = useState<string | null>(null);
+  // Progress across the multi-request upload, so a retry resumes rather than
+  // re-sending files that already reached the server. Held in state (not a ref)
+  // so it is read from a fresh render on each attempt, never during render.
+  const [progress, setProgress] = useState<SubmitProgress>({
+    reference: null,
+    uploadedSlots: [],
+  });
 
   const {
     control,
@@ -68,12 +77,19 @@ export function VerificationForm({ details, onSubmitted }: VerificationFormProps
     setFormError(null);
 
     startTransition(async () => {
-      const result = await submitRefundRequest(details, values);
+      const result = await submitRefundRequest(details, values, {
+        progress,
+        onStep: setStepLabel,
+      });
 
       if (result.status === "success") {
+        setProgress({ reference: null, uploadedSlots: [] });
         onSubmitted(result.reference);
         return;
       }
+
+      // Remember what was delivered so a retry resumes from there.
+      setProgress(result.progress);
 
       if (result.status === "invalid") {
         // Map server-side field errors back onto the matching controls, so a
@@ -181,7 +197,7 @@ export function VerificationForm({ details, onSubmitted }: VerificationFormProps
           Back to order details
         </Link>
         <Button type="submit" isLoading={isPending} className="sm:w-auto">
-          {isPending ? "Submitting…" : "Submit refund request"}
+          {isPending ? (stepLabel ?? "Submitting…") : "Submit refund request"}
         </Button>
       </div>
     </form>

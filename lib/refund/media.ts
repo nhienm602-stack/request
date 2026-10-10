@@ -18,22 +18,35 @@ export interface MediaConstraints {
   readonly label: string;
 }
 
+/**
+ * Upload size limits.
+ *
+ * These are kept deliberately small because each file is sent in its own
+ * request (see submission-contract.ts) and the host caps a single request body
+ * at ~6 MB. Allowing a file bigger than that would only produce an opaque
+ * platform rejection, so the limit is enforced here where we can show the user
+ * a clear message instead. Photos are compressed in the browser before upload
+ * (see compress-image.ts), so the 4 MB ceiling is a safety backstop they rarely
+ * reach; the video is not re-encoded, so its 4 MB ceiling is a real limit on
+ * clip length / quality until a storage-backed upload path exists.
+ */
 export const PHOTO_CONSTRAINTS: MediaConstraints = {
-  maxBytes: 10 * MEGABYTE,
+  maxBytes: 4 * MEGABYTE,
   mimeTypes: ["image/jpeg", "image/png", "image/heic", "image/heif"],
   extensions: [".jpg", ".jpeg", ".png", ".heic", ".heif"],
   label: "JPG, PNG or HEIC",
 };
 
 export const VIDEO_CONSTRAINTS: MediaConstraints = {
-  maxBytes: 50 * MEGABYTE,
+  maxBytes: 4 * MEGABYTE,
   mimeTypes: ["video/mp4", "video/quicktime", "video/webm"],
   extensions: [".mp4", ".mov", ".webm"],
   label: "MP4, MOV or WebM",
 };
 
 export const VIDEO_MIN_DURATION_SECONDS = 3;
-export const VIDEO_MAX_DURATION_SECONDS = 60;
+// Kept short so a phone recording stays under the per-request size limit above.
+export const VIDEO_MAX_DURATION_SECONDS = 20;
 
 /** Value for an `<input type="file">` `accept` attribute. */
 export function acceptAttribute(constraints: MediaConstraints): string {

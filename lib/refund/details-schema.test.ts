@@ -40,13 +40,20 @@ describe("refundDetailsSchema", () => {
     expect(result.city).toBe("Milano");
   });
 
-  it.each([
-    ["", "required"],
-    ["AB", "receipt"],
-    ["ORD 48213", "receipt"],
-  ])("rejects the order number %j", (orderNumber) => {
-    expect(errorFor({ orderNumber }, "orderNumber")).toBeDefined();
+  // Strict format checking is temporarily disabled (STRICT_ORDER_NUMBER=false
+  // in details-schema.ts). An empty order number is still rejected, but values
+  // that the old format regex refused are now accepted. See
+  // docs/ORDER-NUMBER-VALIDATION.md.
+  it("still rejects an empty order number", () => {
+    expect(errorFor({ orderNumber: "" }, "orderNumber")).toBeDefined();
   });
+
+  it.each(["AB", "ORD 48213", "12345", "#4821"])(
+    "now accepts the order number %j",
+    (orderNumber) => {
+      expect(errorFor({ orderNumber }, "orderNumber")).toBeUndefined();
+    }
+  );
 
   it("requires both a first and last name", () => {
     expect(errorFor({ fullName: "Maria" }, "fullName")).toMatch(/first and last name/i);
