@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 import { POST } from "./route";
 import { handOffRefundSubmission } from "@/lib/refund/submission-handoff";
+import {
+  DETAILS_FIELD,
+  REFERENCE_FIELD,
+  SLOT_FIELD,
+  STEP_FIELD,
+} from "@/lib/refund/submission-contract";
 import { jpegFile, mp4File, pdfFile, pngFile } from "@/test/fixtures/media";
 
 /**
@@ -138,6 +144,59 @@ describe("POST /api/refund-requests", () => {
     expect(response.status).toBe(500);
     const raw = JSON.stringify(await response.json());
     expect(raw).not.toMatch(/internal-9|upstream refused/);
+  });
+});
+
+describe("POST /api/refund-requests (chunked protocol)", () => {
+  function stepForm(fields: Record<string, unknown>) {
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === undefined) continue;
+      formData.set(key, value as string | Blob);
+    }
+    return formData;
+  }
+
+  it("rejects a file step with no reference (400)", async () => {
+    const response = await POST(
+      multipartRequest(stepForm({ [STEP_FIELD]: "file", [SLOT_FIELD]: "backPhoto", backPhoto: pngFile() }))
+    );
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.message).toMatch(/reference/i);
+    expect(handOff).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file step with an unknown slot (400)", async () => {
+    const response = await POST(
+      multipartRequest(
+        stepForm({ [STEP_FIELD]: "file", [REFERENCE_FIELD]: "REF-1", [SLOT_FIELD]: "passport", passport: pngFile() })
+      )
+    );
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.message).toMatch(/unknown file/i);
+  });
+
+  it("rejects an unrecognised step (400)", async () => {
+    const response = await POST(multipartRequest(stepForm({ [STEP_FIELD]: "teleport" })));
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 501 for an init step while no integration is configured", async () => {
+    // No TELEGRAM_* env here, so the real senders raise NotImplemented → 501.
+    const response = await POST(
+      multipartRequest(
+        stepForm({
+          [STEP_FIELD]: "init",
+          [DETAILS_FIELD]: JSON.stringify(VALID_DETAILS),
+          frontPhoto: jpegFile(),
+        })
+      )
+    );
+
+    expect(response.status).toBe(501);
+    expect(await response.json()).not.toHaveProperty("reference");
   });
 });
 

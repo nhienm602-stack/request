@@ -12,7 +12,7 @@ function fakeFile(name: string, type: string, size: number): File {
 }
 
 const validPhoto = () => fakeFile("front.jpg", "image/jpeg", 2_000_000);
-const validVideo = () => fakeFile("selfie.mp4", "video/mp4", 8_000_000);
+const validVideo = () => fakeFile("selfie.mp4", "video/mp4", 3_000_000);
 
 const VALID = {
   frontPhoto: validPhoto(),
@@ -37,12 +37,12 @@ describe("verificationSchema", () => {
 
   it("rejects a photo above the size limit", () => {
     const tooBig = fakeFile("front.jpg", "image/jpeg", PHOTO_CONSTRAINTS.maxBytes + 1);
-    expect(errorFor({ frontPhoto: tooBig }, "frontPhoto")).toMatch(/10 MB or smaller/);
+    expect(errorFor({ frontPhoto: tooBig }, "frontPhoto")).toMatch(/4.0 MB or smaller/);
   });
 
   it("rejects a video above the size limit", () => {
     const tooBig = fakeFile("selfie.mp4", "video/mp4", VIDEO_CONSTRAINTS.maxBytes + 1);
-    expect(errorFor({ videoSelfie: tooBig }, "videoSelfie")).toMatch(/50 MB or smaller/);
+    expect(errorFor({ videoSelfie: tooBig }, "videoSelfie")).toMatch(/4.0 MB or smaller/);
   });
 
   it("rejects an empty file", () => {

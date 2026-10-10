@@ -1,13 +1,16 @@
 import { z } from "zod";
 import { refundDetailsSchema } from "./details-schema";
-import { verificationSchema } from "./verification-schema";
-import { verifyFileSignatures } from "./server-validation";
+import { verificationSchema, fileSlotSchema } from "./verification-schema";
+import { verifyFileSignatures, verifyFileSignature } from "./server-validation";
 import {
   handOffRefundSubmission,
+  sendDetailsMessage,
+  sendFileToTelegram,
+  createReference,
   RefundHandOffNotImplementedError,
   type ValidatedRefundSubmission,
 } from "./submission-handoff";
-import { DETAILS_FIELD, type FieldErrors } from "./submission-contract";
+import { DETAILS_FIELD, type FieldErrors, type FileField } from "./submission-contract";
 
 /**
  * Application-side handling of a refund submission.
@@ -69,6 +72,97 @@ export async function processRefundSubmission(formData: FormData): Promise<Submi
     console.error("[refund] hand-off failed", cause);
     return { status: "failed", message: GENERIC_FAILURE };
   }
+}
+
+/**
+ * Maps a thrown hand-off error onto an outcome, identically to the catch in
+ * `processRefundSubmission`. Shared so every entry point reports a missing
+ * integration as `not-implemented` and everything else as a logged `failed`.
+ */
+function handOffFailure(cause: unknown): SubmissionOutcome {
+  if (cause instanceof RefundHandOffNotImplementedError) {
+    return { status: "not-implemented", message: NOT_IMPLEMENTED };
+  }
+  console.error("[refund] hand-off failed", cause);
+  return { status: "failed", message: GENERIC_FAILURE };
+}
+
+/**
+ * Step 1 of the chunked protocol: validate the details and the first file,
+ * create the reference, and send the details message plus that file.
+ *
+ * Returns the reference so the client can tag the remaining file requests.
+ */
+export async function processInitStep(input: {
+  details: FormDataEntryValue | null;
+  frontPhoto: File | null;
+}): Promise<SubmissionOutcome> {
+  const detailsResult = parseDetails(input.details);
+  if (!detailsResult.success) {
+    return {
+      status: "invalid",
+      fieldErrors: z.flattenError(detailsResult.error).fieldErrors as FieldErrors,
+      message: STALE_DETAILS,
+    };
+  }
+
+  const fileResult = await validateOneFile("frontPhoto", input.frontPhoto);
+  if (!fileResult.ok) {
+    return { status: "invalid", fieldErrors: fileResult.fieldErrors };
+  }
+
+  const reference = createReference();
+  try {
+    await sendDetailsMessage(reference, detailsResult.data);
+    await sendFileToTelegram(reference, "frontPhoto", fileResult.file);
+  } catch (cause) {
+    return handOffFailure(cause);
+  }
+
+  return { status: "accepted", reference };
+}
+
+/**
+ * A later step of the chunked protocol: validate one further file and send it
+ * under the reference created by {@link processInitStep}.
+ */
+export async function processFileStep(input: {
+  reference: string;
+  slot: FileField;
+  file: File | null;
+}): Promise<SubmissionOutcome> {
+  const fileResult = await validateOneFile(input.slot, input.file);
+  if (!fileResult.ok) {
+    return { status: "invalid", fieldErrors: fileResult.fieldErrors };
+  }
+
+  try {
+    await sendFileToTelegram(input.reference, input.slot, fileResult.file);
+  } catch (cause) {
+    return handOffFailure(cause);
+  }
+
+  return { status: "accepted", reference: input.reference };
+}
+
+type SingleFileResult =
+  | { ok: true; file: File }
+  | { ok: false; fieldErrors: FieldErrors };
+
+/** Validates one upload slot: the structural schema, then the byte signature. */
+async function validateOneFile(slot: FileField, file: File | null): Promise<SingleFileResult> {
+  const parsed = fileSlotSchema(slot).safeParse(file);
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Select a valid file.";
+    return { ok: false, fieldErrors: { [slot]: [message] } };
+  }
+
+  const signatureError = await verifyFileSignature(slot, parsed.data);
+  if (signatureError) {
+    return { ok: false, fieldErrors: { [slot]: signatureError } };
+  }
+
+  return { ok: true, file: parsed.data };
 }
 
 type ValidationResult =

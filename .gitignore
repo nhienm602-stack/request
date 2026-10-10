@@ -1,9 +1,14 @@
 node_modules/
 .env
+# Local secrets (Telegram tokens etc.) — must never be committed.
+.env.local
+.env*.local
 
 # Next.js build output — regenerated on every build, never committed.
 .next/
 out/
+# TypeScript incremental build cache — regenerated, never committed.
+tsconfig.tsbuildinfo
 vite.config.js.timestamp-*.mjs
 vite.config.mjs.timestamp-*.mjs
 vite.config.cjs.timestamp-*.mjs

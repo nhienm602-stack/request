@@ -15,9 +15,23 @@ import { MAX_ORDER_AMOUNT, MIN_ORDER_AMOUNT, parseOrderAmount } from "./amount";
 /** Letters (any script), spaces, hyphens, apostrophes and periods. */
 const NAME_CHARS = /^[\p{L}\p{M}'’.\- ]+$/u;
 
-export const refundDetailsSchema = z
-  .object({
-    orderNumber: z
+/**
+ * Strict order-number format checking.
+ *
+ * TEMPORARY (set `false`): while the order lookup is unavailable, customers were
+ * being blocked by format rejections, so we accept any non-empty order number.
+ * Set back to `true` to restore the full format + length validation.
+ * See docs/ORDER-NUMBER-VALIDATION.md.
+ */
+const STRICT_ORDER_NUMBER = false;
+
+/**
+ * The order-number rule. Both branches trim and upper-case so downstream
+ * lookups stay case-insensitive; they differ only in how strict the format
+ * check is. Swapping branches is the single lever for the behaviour above.
+ */
+const orderNumberField = STRICT_ORDER_NUMBER
+  ? z
       .string()
       .trim()
       .min(1, "Order number is required.")
@@ -27,7 +41,22 @@ export const refundDetailsSchema = z
         "Enter the order number exactly as it appears on your receipt (letters, numbers and hyphens)."
       )
       // Order numbers are case-insensitive references; store one canonical form.
-      .transform((value) => value.toUpperCase()),
+      .transform((value) => value.toUpperCase())
+  : z
+      .string()
+      .trim()
+      // Still required: an empty order number gives us nothing to match a refund
+      // against, and keeps the form from accepting blank submissions.
+      .min(1, "Order number is required.")
+      // A generous ceiling so no legitimate reference is rejected, while still
+      // guarding against pathological input.
+      .max(64, "Order number must be 64 characters or fewer.")
+      // Order numbers are case-insensitive references; store one canonical form.
+      .transform((value) => value.toUpperCase());
+
+export const refundDetailsSchema = z
+  .object({
+    orderNumber: orderNumberField,
 
     // Kept as a string through validation so the user's own formatting survives
     // round-trips; `parsedAmount` below carries the numeric value.
